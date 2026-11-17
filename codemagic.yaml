@@ -1,0 +1,47 @@
+workflows:
+  gully-danda-3d-apk:
+    name: Apoosh APK
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      java: 17
+      node: 20
+    scripts:
+      - name: Unzip the project (if the repo holds the zip)
+        script: |
+          cd "$CM_BUILD_DIR"
+          if [ ! -f app.yaml ]; then
+            ZIP=$(ls *.zip | head -n 1)
+            unzip -o -q "$ZIP" -d unzipped
+            PROJ=$(dirname "$(find unzipped -name app.yaml | head -n 1)")
+            cp -r "$PROJ"/. .
+          fi
+      - name: Bundle Three.js for offline play
+        script: |
+          cd "$CM_BUILD_DIR"
+          npm install --no-audit --no-fund
+          if [ ! -s www/lib/three.min.js ]; then
+            mkdir -p www/lib
+            curl -fsSL https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js -o www/lib/three.min.js
+          fi
+          ls -la www/lib
+      - name: Bundle the fonts for offline play
+        script: |
+          cd "$CM_BUILD_DIR"
+          mkdir -p www/fonts
+          for w in 500 600 700 800; do
+            f=www/fonts/baloo2-$w.woff2
+            [ -s "$f" ] || curl -fsSL "https://cdn.jsdelivr.net/npm/@fontsource/baloo-2@5/files/baloo-2-latin-$w-normal.woff2" -o "$f" || echo "Baloo 2 $w not bundled (system font used)"
+          done
+          f=www/fonts/nastaliq-700.woff2
+          [ -s "$f" ] || curl -fsSL "https://cdn.jsdelivr.net/npm/@fontsource/noto-nastaliq-urdu@5/files/noto-nastaliq-urdu-arabic-700-normal.woff2" -o "$f" || echo "Urdu font not bundled (system font used)"
+          ls -la www/fonts
+      - name: Point Gradle at the Android SDK
+        script: echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Build the APK
+        script: |
+          cd "$CM_BUILD_DIR/android"
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+    artifacts:
+      - android/app/build/outputs/apk/debug/*.apk
